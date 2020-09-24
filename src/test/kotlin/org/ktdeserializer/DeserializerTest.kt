@@ -26,7 +26,7 @@ class DeserializerTest {
 
         val module: SimpleModule = SimpleModule().addDeserializer(Bleh::class.java, Deserializer(Bleh::class.java))
         objectMapper.registerModule(module)
-        val json = """{"name":"Myname"}"""
+        val json = """{"orange":3}"""
         val bleh = objectMapper.readValue<Bleh>(json)
         val returned = when (bleh) {
             is Bleh.Orange -> "is an orange"

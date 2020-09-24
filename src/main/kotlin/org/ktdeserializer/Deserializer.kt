@@ -48,9 +48,11 @@ class Deserializer<T: Any>(val type: Class<T>) : JsonDeserializer<T>() {
         // requiredArgs.map { constructor -> constructor.m}
         // On match found, rearrange args as per original parameter order
 
-        val orangeConstructor = constructors.first()
+        val orangeConstructor = constructors.first() // Change to iterate all subtypes
 
         // Currently crashes here
-        return orangeConstructor.first().newInstance(*args.toTypedArray()) as T
+        val realArgs = args.map { it.value }
+
+        return orangeConstructor.first().newInstance(*realArgs.toTypedArray()) as T
     }
 }
