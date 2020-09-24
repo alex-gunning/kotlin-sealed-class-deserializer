@@ -25,7 +25,7 @@ class Deserializer<T: Any>(private val type: KClass<T>) : JsonDeserializer<T>() 
             .map { c ->
                 c.first()
                     .parameters
-                    .map { Param(type = it.type.toString(), name = it.name!!, nullable = it.isOptional) } // Need to account for nullables here.
+                    .map { Param(type = it.type.toString(), name = it.name!!, nullable = it.isOptional) }
                     .sortedBy { it.name }
             }
 
@@ -45,11 +45,10 @@ class Deserializer<T: Any>(private val type: KClass<T>) : JsonDeserializer<T>() 
 
         // Match args to requiredArgs while considering nullable fields
         // requiredArgs.map { constructor -> constructor.m}
-        // On match found, rearrange args as per original parameter order
-
         val orangeConstructor = constructors.first() // Change to iterate all subtypes
         val parameterOrder = subs.first().constructors.first().parameters
 
+        // On match found, rearrange args as per original parameter order
         val realArgs = args
                 .map { it }
                 .sortedBy {
@@ -58,6 +57,6 @@ class Deserializer<T: Any>(private val type: KClass<T>) : JsonDeserializer<T>() 
                 }
                 .map { it.value }
 
-        return orangeConstructor.first().call(*realArgs.toTypedArray()) as T
+        return orangeConstructor.first().call(*realArgs.toTypedArray())
     }
 }
