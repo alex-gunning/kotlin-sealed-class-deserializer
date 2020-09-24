@@ -24,7 +24,7 @@ class DeserializerTest {
     fun testSerialisation() {
         val objectMapper = jacksonObjectMapper()
 
-        val module: SimpleModule = SimpleModule().addDeserializer(Bleh::class.java, Deserializer())
+        val module: SimpleModule = SimpleModule().addDeserializer(Bleh::class.java, Deserializer(Bleh::class.java))
         objectMapper.registerModule(module)
         val json = """{"name":"Myname"}"""
         val bleh = objectMapper.readValue<Bleh>(json)

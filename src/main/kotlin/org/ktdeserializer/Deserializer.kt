@@ -7,24 +7,26 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.node.JsonNodeType
+import kotlin.reflect.KClass
+import kotlin.reflect.full.createInstance
+import kotlin.reflect.typeOf
 
 interface Serializable
 
-class Deserializer<T: Serializable> : JsonDeserializer<T>() {
-
-    data class Param(val type: String, val name: String, val nullable: Boolean, val value: Any? = null)
+class Deserializer<T: Any>(val type: Class<T>) : JsonDeserializer<T>() {
+    data class Param(val type: String, val name: String, val nullable: Boolean? = null, val value: Any? = null)
 
     fun Param.matches(other: Param): Boolean =
         this.type == other.type && this.name == other.name && this.nullable == other.nullable
 
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): T {
-        val b:Class<T>? = null
-        val constructors = b!!::class.sealedSubclasses.map { it.constructors }
+        val a = type.classes
+        val constructors = type.classes.map { it.constructors }
         val requiredArgs = constructors
             .map { c ->
                 c.first()
                     .parameters
-                    .map { Param(type = it.type.toString(), name = it.name!!, nullable = it.isOptional) }
+                    .map { Param(type = it.type.toString(), name = it.name!!, nullable = null) } // Need to account for nullables here.
                     .sortedBy { it.name }
             }
 
@@ -34,8 +36,8 @@ class Deserializer<T: Serializable> : JsonDeserializer<T>() {
         // Incoming deserialized fields - Create args list
         val args = node.fields().asSequence().toHashSet().map {
             when (it.value.nodeType) {
-                JsonNodeType.STRING -> TODO("")//Param(type = "kotlin.String", name = it.key, value = it.value.textValue())
-                JsonNodeType.NUMBER -> TODO("")//Param(type = "kotlin.Int", name = it.key, value = it.value.intValue())
+                JsonNodeType.NUMBER -> Param(type = "kotlin.Int", name = it.key, value = it.value.intValue())
+                JsonNodeType.STRING -> Param(type = "kotlin.String", name = it.key, value = it.value.textValue())
                 JsonNodeType.BOOLEAN -> TODO("Implement boolean")
                 JsonNodeType.OBJECT -> TODO("Recursive step for this object")
                 else -> throw Error("Deserialized data type not yet supported.")
@@ -47,15 +49,8 @@ class Deserializer<T: Serializable> : JsonDeserializer<T>() {
         // On match found, rearrange args as per original parameter order
 
         val orangeConstructor = constructors.first()
-        // val obj = orangeConstructor.first().call(*args)
 
-        val msgNode = node.get("a")
-//        if (msgNode.nodeType == JsonNodeType.STRING) {
-//            return R.orange(msgNode.textValue())
-//        } else {
-//            return R.apple(node.get("b").intValue(), node.get("c").textValue(), node.get("aa").booleanValue())
-//        }
-        val thething: Class<T> = orangeConstructor.first().call(*args.toTypedArray())
-        return thething.constructors.first().newInstance(*args.toTypedArray()) as T
+        // Currently crashes here
+        return orangeConstructor.first().newInstance(*args.toTypedArray()) as T
     }
 }
