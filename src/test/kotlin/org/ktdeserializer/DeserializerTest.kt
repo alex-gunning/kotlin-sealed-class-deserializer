@@ -8,8 +8,8 @@ import junit.framework.Assert.assertEquals
 import org.junit.Test
 import org.junit.jupiter.api.DisplayName
 
-sealed class Bleh(): Serializable {
-    data class Orange(val name: String): Bleh()
+sealed class Bleh() {
+    data class Orange(val age: Int, val name: String): Bleh()
     data class Apple(val age: Int): Bleh()
 }
 
@@ -24,9 +24,9 @@ class DeserializerTest {
     fun testSerialisation() {
         val objectMapper = jacksonObjectMapper()
 
-        val module: SimpleModule = SimpleModule().addDeserializer(Bleh::class.java, Deserializer(Bleh::class.java))
+        val module: SimpleModule = SimpleModule().addDeserializer(Bleh::class.java, Deserializer(Bleh::class))
         objectMapper.registerModule(module)
-        val json = """{"orange":3}"""
+        val json = """{"name":"Alex","age":31}"""
         val bleh = objectMapper.readValue<Bleh>(json)
         val returned = when (bleh) {
             is Bleh.Orange -> "is an orange"

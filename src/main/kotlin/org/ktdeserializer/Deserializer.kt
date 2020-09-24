@@ -8,22 +8,24 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.node.JsonNodeType
 import kotlin.reflect.KClass
+import kotlin.reflect.KParameter
 import kotlin.reflect.full.createInstance
 import kotlin.reflect.typeOf
 
-class Deserializer<T: Any>(private val type: Class<T>) : JsonDeserializer<T>() {
+class Deserializer<T: Any>(private val type: KClass<T>) : JsonDeserializer<T>() {
     data class Param(val type: String, val name: String, val nullable: Boolean? = null, val value: Any? = null)
 
     fun Param.matches(other: Param): Boolean =
         this.type == other.type && this.name == other.name && this.nullable == other.nullable
 
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): T {
-        val constructors = type.classes.map { it.constructors }
+        val subs = type::sealedSubclasses.get()
+        val constructors = subs.map { it.constructors }
         val requiredArgs = constructors
             .map { c ->
                 c.first()
                     .parameters
-                    .map { Param(type = it.type.toString(), name = it.name!!, nullable = null) } // Need to account for nullables here.
+                    .map { Param(type = it.type.toString(), name = it.name!!, nullable = it.isOptional) } // Need to account for nullables here.
                     .sortedBy { it.name }
             }
 
@@ -46,9 +48,16 @@ class Deserializer<T: Any>(private val type: Class<T>) : JsonDeserializer<T>() {
         // On match found, rearrange args as per original parameter order
 
         val orangeConstructor = constructors.first() // Change to iterate all subtypes
+        val parameterOrder = subs.first().constructors.first().parameters
 
-        val realArgs = args.map { it.value }
+        val realArgs = args
+                .map { it }
+                .sortedBy {
+                    // Match params from JSON to arg order in constructor
+                    parameterOrder.find { p -> p.name == it.name }!!.index
+                }
+                .map { it.value }
 
-        return orangeConstructor.first().newInstance(*realArgs.toTypedArray()) as T
+        return orangeConstructor.first().call(*realArgs.toTypedArray()) as T
     }
 }
