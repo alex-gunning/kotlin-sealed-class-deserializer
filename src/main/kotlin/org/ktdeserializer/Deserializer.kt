@@ -11,16 +11,13 @@ import kotlin.reflect.KClass
 import kotlin.reflect.full.createInstance
 import kotlin.reflect.typeOf
 
-interface Serializable
-
-class Deserializer<T: Any>(val type: Class<T>) : JsonDeserializer<T>() {
+class Deserializer<T: Any>(private val type: Class<T>) : JsonDeserializer<T>() {
     data class Param(val type: String, val name: String, val nullable: Boolean? = null, val value: Any? = null)
 
     fun Param.matches(other: Param): Boolean =
         this.type == other.type && this.name == other.name && this.nullable == other.nullable
 
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): T {
-        val a = type.classes
         val constructors = type.classes.map { it.constructors }
         val requiredArgs = constructors
             .map { c ->
@@ -50,7 +47,6 @@ class Deserializer<T: Any>(val type: Class<T>) : JsonDeserializer<T>() {
 
         val orangeConstructor = constructors.first() // Change to iterate all subtypes
 
-        // Currently crashes here
         val realArgs = args.map { it.value }
 
         return orangeConstructor.first().newInstance(*realArgs.toTypedArray()) as T
