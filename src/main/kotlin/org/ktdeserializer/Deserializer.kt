@@ -5,12 +5,8 @@ import com.fasterxml.jackson.databind.DeserializationContext
 import com.fasterxml.jackson.databind.JsonDeserializer
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.deser.std.StdDeserializer
 import com.fasterxml.jackson.databind.node.JsonNodeType
 import kotlin.reflect.KClass
-import kotlin.reflect.KParameter
-import kotlin.reflect.full.createInstance
-import kotlin.reflect.typeOf
 
 class Deserializer<T: Any>(private val type: KClass<T>) : JsonDeserializer<T>() {
     data class Param(val type: String, val name: String, val nullable: Boolean? = null, val value: Any? = null)
@@ -43,20 +39,28 @@ class Deserializer<T: Any>(private val type: KClass<T>) : JsonDeserializer<T>() 
             }
         }.toList()
 
-        // Match args to requiredArgs while considering nullable fields
-        // requiredArgs.map { constructor -> constructor.m}
-        val orangeConstructor = constructors.first() // Change to iterate all subtypes
-        val parameterOrder = subs.first().constructors.first().parameters
+        val orangeConstructor = constructors.first() // DORK - Find correct constructor
+        val selectedConstructorParameters = subs.first().constructors.first().parameters
 
-        // On match found, rearrange args as per original parameter order
-        val realArgs = args
-                .map { it }
+
+        // First find params which were not passed
+        val missingArgs = selectedConstructorParameters
+                //.filter { it.isOptional }
+                .filterNot { cParam -> args.find { a -> a.name == cParam.name } != null }
+                .map { Pair(it.index, null) }
+
+        // then find params which were found
+        val suppliedArgs = args
+                .map { Pair(selectedConstructorParameters.find { p -> p.name == it.name }!!.index, it.value) }
                 .sortedBy {
-                    // Match params from JSON to arg order in constructor
-                    parameterOrder.find { p -> p.name == it.name }!!.index
+                    it.first
                 }
-                .map { it.value }
 
-        return orangeConstructor.first().call(*realArgs.toTypedArray())
+        val argsToBePassed = suppliedArgs
+                .union(missingArgs)
+                .sortedBy { it.first }
+                .map { it.second }
+
+        return orangeConstructor.first().call(*argsToBePassed.toTypedArray())
     }
 }

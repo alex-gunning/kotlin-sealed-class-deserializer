@@ -8,8 +8,8 @@ import junit.framework.Assert.assertEquals
 import org.junit.Test
 import org.junit.jupiter.api.DisplayName
 
-sealed class Bleh() {
-    data class Orange(val age: Int, val name: String): Bleh()
+sealed class Bleh {
+    data class Orange(val age: Int, val name: String, val status: String? = null): Bleh()
     data class Apple(val age: Int): Bleh()
 }
 
