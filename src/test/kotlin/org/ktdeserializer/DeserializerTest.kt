@@ -1,38 +1,39 @@
 package org.ktdeserializer
 
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import junit.framework.Assert.assertEquals
 import org.junit.Test
+import org.junit.Before
 import org.junit.jupiter.api.DisplayName
 
-sealed class Bleh {
-    data class Orange(val age: Int, val name: String, val status: String? = null): Bleh()
-    data class Apple(val age: Int): Bleh()
-}
-
 class DeserializerTest {
-    @Test
-    fun testMyLanguage() {
-        assertEquals(1, 1)
+    sealed class Fruits {
+        data class Orange(val colour: String, val bitterness: Int? = null, val dimpled: Boolean) : Fruits()
+        data class Apple(val colour: String) : Fruits()
+    }
+    private val objectMapper = jacksonObjectMapper()
+    private val sealedClassDeserializer: SimpleModule = SimpleModule().addDeserializer(Fruits::class.java, Deserializer(Fruits::class))
+
+    @Before
+    fun setup() {
+        objectMapper.registerModule(sealedClassDeserializer)
     }
 
     @Test
-    @DisplayName("Jackson Serialisation")
+    @DisplayName("All params passed should retrieve an orange")
     fun testSerialisation() {
-        val objectMapper = jacksonObjectMapper()
+        val json = """{
+                    |"colour":"yellowish",
+                    |"bitterness":31,
+                    |"dimpled":true
+                    |}""".trimMargin()
 
-        val module: SimpleModule = SimpleModule().addDeserializer(Bleh::class.java, Deserializer(Bleh::class))
-        objectMapper.registerModule(module)
-        val json = """{"name":"Alex","age":31}"""
-        val bleh = objectMapper.readValue<Bleh>(json)
-        val returned = when (bleh) {
-            is Bleh.Orange -> "is an orange"
-            is Bleh.Apple -> "is an apple"
+        val fruitType = when (objectMapper.readValue<Fruits>(json)) {
+            is Fruits.Orange -> "is an orange"
+            is Fruits.Apple -> "is an apple"
         }
-        assert(returned.equals("is an orange"))
+        assert(fruitType.equals("is an orange"))
     }
 }
 
