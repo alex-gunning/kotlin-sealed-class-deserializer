@@ -35,5 +35,37 @@ class DeserializerTest {
         }
         assert(fruitType.equals("is an orange"))
     }
+
+    @Test
+    @DisplayName("Passing only required values should retrieve the correct subclass by supplying nulls")
+    fun chooseCorrectSubclass() {
+        val json = """{
+                    |"colour":"yellowish",
+                    |"dimpled":true
+                    |}""".trimMargin()
+
+        val fruitType = when (objectMapper.readValue<Fruits>(json)) {
+            is Fruits.Orange -> "is an orange"
+            is Fruits.Apple -> "is an apple"
+        }
+        assert(fruitType.equals("is an orange"))
+    }
+
+    @Test
+    @DisplayName("Selects correct subclass even if supplied parameter names match")
+    fun chooseCorrectSubclassEvenIfParamNamesClash() {
+        val json = """{
+                    |"colour":"pink"
+                    |}""".trimMargin()
+
+        val fruit = objectMapper.readValue<Fruits>(json)
+        val fruitType = when (fruit) {
+            is Fruits.Orange -> throw Error()
+            is Fruits.Apple -> "is an apple"
+        }
+
+        assert(fruit.colour == "pink")
+        assert(fruitType.equals("is an apple"))
+    }
 }
 
