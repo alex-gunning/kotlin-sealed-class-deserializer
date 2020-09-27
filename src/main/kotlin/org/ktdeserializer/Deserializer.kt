@@ -18,23 +18,14 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         val mapper = parser.codec as ObjectMapper
         val node: JsonNode = mapper.readTree(parser)
 
-        // Incoming deserialized fields - Create args list
-        val args: List<Pair<String, Any>> = node.fields().asSequence().toHashSet().map {
-            when (it.value.nodeType) {
-                JsonNodeType.NUMBER -> Pair(it.key, it.value.intValue())
-                JsonNodeType.STRING -> Pair(it.key, it.value.textValue())
-                JsonNodeType.BOOLEAN -> Pair(it.key, it.value.booleanValue())
-                JsonNodeType.OBJECT -> TODO("Recursive step for object")
-                JsonNodeType.ARRAY -> TODO("Iterative step for array")
-                else -> throw Error("Deserialized data type not yet supported.")
-            }
-        }.toList()
+        // Create arguments list for incoming deserialized fields
+        val args: List<Pair<String, Any>> = createArgTree(node)
 
         // Find out which constructor the supplied args match
         val argNames = args.map { it.first }
         val correctConstructor = findCorrectConstructor(constructors, argNames)
 
-        // then find params which were supplied
+        // then create map of supplied params.
         val argsToBePassed = args
                 .map { Pair(correctConstructor.parameters.find { p -> p.name == it.first }, it.second) }
                 .fold(mapOf<KParameter, Any?>()){ map, param -> map + Pair(param.first!!, param.second)}
@@ -42,6 +33,18 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         // and pass to the constructor as named arguments. Kotlin will handle defaults
         return correctConstructor.callBy(argsToBePassed)
     }
+
+    private fun createArgTree(node: JsonNode): List<Pair<String, Any>> =
+        node.fields().asSequence().toHashSet().map {
+            when (it.value.nodeType) {
+                JsonNodeType.NUMBER -> Pair(it.key, it.value.intValue())
+                JsonNodeType.STRING -> Pair(it.key, it.value.textValue())
+                JsonNodeType.BOOLEAN -> Pair(it.key, it.value.booleanValue())
+                JsonNodeType.OBJECT -> Pair(it.key, createArgTree(it.value))
+                JsonNodeType.ARRAY -> TODO("Iterative step for array")
+                else -> throw Error("Deserialized data type not yet supported.")
+            }
+        }.toList()
 
     private fun findCorrectConstructor(
             constructorList: List<KFunction<T>>,
@@ -68,8 +71,8 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
                 .mapNotNull { if (it.first == null) null else it }
                 .map { Pair(it.first!!, it.second) }
 
-        /*  Check if remaining params are optional.
-        *   Associate with the constructor and filter the valid ones.
+        /*  Create boolean indicating whether remaining params are optional.
+        *   Associate with the constructor and filter the valid ones by the boolean.
         *   Return just the valid constructors.
         */
         val validConstructors = validConstructorsWithoutDefaults
