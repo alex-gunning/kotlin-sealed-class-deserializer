@@ -8,8 +8,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.JsonNodeType
 import kotlin.reflect.*
 import kotlin.reflect.full.createType
-import kotlin.reflect.full.starProjectedType
-import kotlin.reflect.jvm.javaType
 import kotlin.reflect.jvm.jvmErasure
 
 class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>() {
@@ -22,6 +20,10 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
 
         // Create arguments list for incoming deserialized fields
         val args: List<Pair<String, Any>> = createJSONArgTree(node)
+
+        // Convert supplied arg values to their types for comparison
+        val argTypes = args
+                .map { coerceToTypes(it) }
 
         // Find out which constructor the supplied args match
         val correctConstructor = findCorrectConstructor(constructors, args)
@@ -37,6 +39,12 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         return correctConstructor.callBy(argsToBePassed)
     }
 
+    private fun coerceToTypes(arg: Pair<String, Any>): Pair<String, Any> =
+        when (arg.second) {
+            is List<*> -> Pair(arg.first, (arg.second as List<*>).map{ coerceToTypes(it as Pair<String, Any>) })
+            else -> Pair(arg.first, arg.second::class.createType())
+        }
+
     private fun createJSONArgTree(node: JsonNode): List<Pair<String, Any>> =
             node.fields().asSequence().toHashSet().map {
                 when (it.value.nodeType) {
@@ -49,22 +57,6 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
                 }
             }.toList()
 
-    private fun createParameterArgTree(parameter: Pair<String, KType>): Pair<String, Any>
-        // TODO: for this to be really robust we would need to check every single constructor, not just the first one.
-        = when (parameter.second.classifier) {
-            Int::class -> parameter
-            String::class -> parameter
-            Boolean::class -> parameter
-            Float::class -> parameter
-            else -> Pair(
-                    parameter.first,
-                    parameter.second.jvmErasure.constructors.first().parameters
-                            .map {
-                                createParameterArgTree(Pair(it.name!!, it.type))
-                            }
-            )
-        }
-
 
     private fun findCorrectConstructor(
             constructorList: List<KFunction<T>>,
@@ -72,11 +64,7 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         val constructorParamList = constructorList
                 .map { getParameterListWithType(it) }
                 .map { withLexicographicalOrdering(it) }
-
-        // Expand any KParameter constructor objects until they resolve to primitives at the leaves
-        val tree = constructorParamList.map { cstr -> cstr.map { createParameterArgTree(it) } }
-
-        // Now swap tree for tempNameForConstructorParameterName and check both parameter names AND types
+                .map { constructorArgTree(it) }
 
 
         val tempNameForConstructorParameterName = constructorParamList
@@ -118,6 +106,24 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
 
     private fun withLexicographicalOrdering(strList: List<Pair<String, KType>>):
             List<Pair<String, KType>> = strList.sortedBy { it.first }
+
+    private fun createParameterArgTree(parameter: Pair<String, KType>): Pair<String, Any> = when (parameter.second.classifier) {
+        // TODO: for this to be really robust we would need to check every single constructor, not just the first one.
+        Int::class -> parameter
+        String::class -> parameter
+        Boolean::class -> parameter
+        Float::class -> parameter
+        else -> Pair(
+                parameter.first,
+                parameter.second.jvmErasure.constructors.first().parameters
+                        .map {
+                            createParameterArgTree(Pair(it.name!!, it.type))
+                        }
+        )
+    }
+
+    private fun constructorArgTree(constructorArgs: List<Pair<String, KType>>): List<Pair<String, Any>> =
+            constructorArgs.map { createParameterArgTree(it) }
 
     private fun paramNamesWithTypes(params: List<Triple<String, KType, Boolean>>): List<Pair<String, KType>> =
             params.map { Pair(it.first, it.second) }

@@ -80,7 +80,6 @@ class DeserializerTest {
     }
 
     @Test
-    @Ignore
     @DisplayName("Can deserialise compound objects")
     fun canDeserialiseCompoundObject() {
         val json = """{
