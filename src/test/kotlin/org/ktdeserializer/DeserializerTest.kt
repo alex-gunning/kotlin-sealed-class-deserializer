@@ -86,12 +86,12 @@ class DeserializerTest {
         val json = """{
                     |"pointyOuch":false,
                     |"triangleBase": {
-                    |"numSides":3,
-                    |"pointyOuch":true
+                        |"numSides":3,
+                        |"pointyOuch":true
                     |},
                     |"circleUpper": {
-                    |"diameter":5,
-                    |"pointyOuch":false
+                        |"diameter":5,
+                        |"pointyOuch":false
                     |}}""".trimMargin()
 
         val shape = objectMapper.readValue<Shapes>(json)
