@@ -8,13 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.JsonNodeType
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
+import kotlin.reflect.KParameter
 
 class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>() {
-    data class Param(val type: String, val name: String, val nullable: Boolean? = null, val value: Any? = null)
-
-    fun Param.matches(other: Param): Boolean =
-            this.type == other.type && this.name == other.name && this.nullable == other.nullable
-
     override fun deserialize(parser: JsonParser, ctx: DeserializationContext): T {
         val sealedSubclasses = type::sealedSubclasses.get()
         val constructors = sealedSubclasses.map { it.constructors }.map { it.first() }
@@ -35,27 +31,16 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         }.toList()
 
         // Find out which constructor the supplied args match
-        val correctConstructor = findCorrectConstructor(constructors, args.map { it.first })
-
-        // First find params which were not passed
-        val missingArgs = correctConstructor.parameters
-                .filterNot { cParam -> args.find { a -> a.first == cParam.name } != null }
-                .map { Pair(it.index, null) }
+        val argNames = args.map { it.first }
+        val correctConstructor = findCorrectConstructor(constructors, argNames)
 
         // then find params which were supplied
-        val suppliedArgs = args
-                .map { Pair(correctConstructor.parameters.find { p -> p.name == it.first }!!.index, it.second) }
-                .sortedBy {
-                    it.first
-                }
+        val argsToBePassed = args
+                .map { Pair(correctConstructor.parameters.find { p -> p.name == it.first }, it.second) }
+                .fold(mapOf<KParameter, Any?>()){ map, param -> map + Pair(param.first!!, param.second)}
 
-        // merge them in the correct order
-        val argsToBePassed = suppliedArgs
-                .union(missingArgs)
-                .sortedBy { it.first }
-                .map { it.second }
-
-        return correctConstructor.call(*argsToBePassed.toTypedArray())
+        // and pass to the constructor as named arguments. Kotlin will handle defaults
+        return correctConstructor.callBy(argsToBePassed)
     }
 
     private fun findCorrectConstructor(
@@ -63,12 +48,12 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
             suppliedParamList: List<String>): KFunction<T> {
         val constructorParamList = constructorList
                 .map { getParameterListWithOptionality(it) }
-                .map { withLexicographicOrdering(it) }
+                .map { withLexicographicalOrdering(it) }
         val constructorParameterNames = constructorParamList
                 .map { onlyParamNames(it) }
 
         /*  Remove supplied params from each constructor in the list.
-        *   Null if a constructor does not have a parameter which has been supplied.
+        *   Return null if a constructor does not have a parameter which has been supplied.
         */
         val constructorsMinusSuppliedParams: List<List<String>?> =
                 constructorParameterNames.map {
@@ -80,26 +65,28 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         */
         val validConstructorsWithoutDefaults = constructorsMinusSuppliedParams
                 .zip(constructorList)
-                .mapNotNull{ if(it.first == null) null else it }
-                .map{ Pair(it.first!!, it.second)}
+                .mapNotNull { if (it.first == null) null else it }
+                .map { Pair(it.first!!, it.second) }
 
         /*  Check if remaining params are optional.
         *   Associate with the constructor and filter the valid ones.
+        *   Return just the valid constructors.
         */
         val validConstructors = validConstructorsWithoutDefaults
                 .map { checkSuppliedParamsOptional(it) }
                 .zip(validConstructorsWithoutDefaults)
-                .map{ Pair(it.first, it.second.second)}
-                .filter{ it.first }
+                .map { Pair(it.first, it.second.second) }
+                .filter { it.first }
+                .map { it.second }
 
-        // We may now have more than one completely valid constructor, just choose the first one.
-        return validConstructors.first().second
+        // We may now have more than one completely valid constructor, just choose the first one as a tiebreaker.
+        return validConstructors.first()
     }
 
     private fun getParameterListWithOptionality(constructor: KFunction<T>): List<Pair<String, Boolean>> =
             constructor.parameters.map { Pair(it.name!!, it.isOptional) }
 
-    private fun withLexicographicOrdering(strList: List<Pair<String, Boolean>>): List<Pair<String, Boolean>> = strList.sortedBy { it.first }
+    private fun withLexicographicalOrdering(strList: List<Pair<String, Boolean>>): List<Pair<String, Boolean>> = strList.sortedBy { it.first }
 
     private fun onlyParamNames(params: List<Pair<String, Boolean>>): List<String> =
             params.map { it.first }
@@ -124,14 +111,13 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         return removeAll(newHaystack, needles.slice(1..needles.lastIndex))
     }
 
-    private fun checkSuppliedParamsOptional(set: Pair<List<String>, KFunction<T>>): Boolean {
-        val unsuppliedParams = set.first
-        val constructor = set.second
+    private fun checkSuppliedParamsOptional(paramPair: Pair<List<String>, KFunction<T>>): Boolean {
+        val unsuppliedParams = paramPair.first
+        val constructor = paramPair.second
 
-        // N.B. Need to detect if params have DEFAULT values supplied, not just nulls as below.
-        val areParamsOptional = unsuppliedParams.map {
-            param -> constructor.parameters.find { cparam -> cparam.name == param }?.isOptional
-        }.fold(true) {a,b -> a && (b?:true)}
+        val areParamsOptional = unsuppliedParams.map { param ->
+            constructor.parameters.find { cparam -> cparam.name == param }?.isOptional
+        }.fold(true) { a, b -> a && (b ?: true) }
         return areParamsOptional
     }
 
