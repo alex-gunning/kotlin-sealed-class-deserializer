@@ -53,3 +53,4 @@ when (myVehicle) {
 2. ~~Select correct subclass from sealed class.~~
 3. Handle objects recursively.
 4. Handle arrays using some sort of iteration.
+5. Handle object serialisation methods.

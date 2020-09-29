@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.node.JsonNodeType
 import kotlin.reflect.*
 import kotlin.reflect.full.createType
+import kotlin.reflect.full.primaryConstructor
 import kotlin.reflect.jvm.jvmErasure
 
 class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>() {
@@ -26,7 +27,7 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
                 .map { coerceToTypes(it) }
 
         // Find out which constructor the supplied args match
-        val correctConstructor = findCorrectConstructor(constructors, args)
+        val correctConstructor = findCorrectConstructor(constructors, argTypes)
 
         // then create map of supplied params.
         //      Create an object on a class with
@@ -40,10 +41,10 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
     }
 
     private fun coerceToTypes(arg: Pair<String, Any>): Pair<String, Any> =
-        when (arg.second) {
-            is List<*> -> Pair(arg.first, (arg.second as List<*>).map{ coerceToTypes(it as Pair<String, Any>) })
-            else -> Pair(arg.first, arg.second::class.createType())
-        }
+            when (arg.second) {
+                is List<*> -> Pair(arg.first, (arg.second as List<*>).map { coerceToTypes(it as Pair<String, Any>) })
+                else -> Pair(arg.first, arg.second::class.createType())
+            }
 
     private fun createJSONArgTree(node: JsonNode): List<Pair<String, Any>> =
             node.fields().asSequence().toHashSet().map {
@@ -63,9 +64,14 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
             suppliedParamList: List<Pair<String, Any>>): KFunction<T> {
         val constructorParamList = constructorList
                 .map { getParameterListWithType(it) }
-                .map { withLexicographicalOrdering(it) }
                 .map { constructorArgTree(it) }
 
+        val isASubtree = constructorParamList.map { includesSubtree(suppliedParamList, it) }
+
+        val fittingConstructors = constructorParamList
+                .zip(isASubtree)
+                .filter { it.second }
+                .map { it.first }
 
         val tempNameForConstructorParameterName = constructorParamList
                 .map { p -> p.map { it.first } } // Just a lens for the parameter name (ignores type)
@@ -91,7 +97,7 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         *   Return just the valid constructors.
         */
         val validConstructors = validConstructorsWithoutDefaults
-                .map { checkSuppliedParamsOptional(it) }
+                .map { checkTheseParamsOptional(it) }
                 .zip(validConstructorsWithoutDefaults)
                 .map { Pair(it.first, it.second.second) }
                 .filter { it.first }
@@ -101,11 +107,25 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         return validConstructors.first()
     }
 
+    // Returns true if all needles exist in haystack.
+    // This means true if supplied params match the constructor params but not necessarily all there.
+    private fun includesSubtree(needles: List<Pair<String, Any>>, haystack: List<Pair<String, Any>>): Boolean =
+            needles.map { needl ->
+                val matcher = haystack.find { hay -> hay.first == needl.first }
+                if (matcher == null) {
+                    false
+                } else if (needl.second is KType && matcher.second is KType) {
+                    (needl.second as KType).jvmErasure.primaryConstructor == (matcher.second as KType).jvmErasure.primaryConstructor
+                } else if (needl.second is List<*> && matcher.second is List<*>) {
+                    includesSubtree(needl.second as List<Pair<String, Any>>, matcher.second as List<Pair<String, Any>>)
+                } else {
+                    false
+                }
+
+            }.fold(true) { a, b -> a && b }
+
     private fun getParameterListWithType(constructor: KFunction<T>): List<Pair<String, KType>> =
             constructor.parameters.map { Pair(it.name!!, it.type) }
-
-    private fun withLexicographicalOrdering(strList: List<Pair<String, KType>>):
-            List<Pair<String, KType>> = strList.sortedBy { it.first }
 
     private fun createParameterArgTree(parameter: Pair<String, KType>): Pair<String, Any> = when (parameter.second.classifier) {
         // TODO: for this to be really robust we would need to check every single constructor, not just the first one.
@@ -148,7 +168,7 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
         return removeAll(newHaystack, needles.slice(1..needles.lastIndex))
     }
 
-    private fun checkSuppliedParamsOptional(paramPair: Pair<List<String>, KFunction<T>>): Boolean {
+    private fun checkTheseParamsOptional(paramPair: Pair<List<String>, KFunction<T>>): Boolean {
         val unsuppliedParams = paramPair.first
         val constructor = paramPair.second
 
