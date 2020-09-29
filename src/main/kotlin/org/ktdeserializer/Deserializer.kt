@@ -68,6 +68,9 @@ class Deserializer<T : Any>(private val type: KClass<T>) : JsonDeserializer<T>()
 
         val isASubtree = constructorParamList.map { includesSubtree(suppliedParamList, it) }
 
+        /*  Any constructors which the supplied params COULD fit in to
+         *  (but are not necessarily valid)
+         */
         val fittingConstructors = constructorParamList
                 .zip(isASubtree)
                 .filter { it.second }
