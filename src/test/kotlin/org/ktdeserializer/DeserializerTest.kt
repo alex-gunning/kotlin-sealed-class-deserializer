@@ -13,20 +13,30 @@ class DeserializerTest {
         data class Orange(val colour: String, val bitterness: Int? = null, val dimpled: Boolean) : Fruits()
         data class Apple(val colour: String, val sweetness: Int? = 3) : Fruits()
     }
+
     sealed class Shapes {
-        data class Triangle(val numSides: Int, val pointyOuch: Boolean): Shapes()
-        data class Circle(val diameter: Float, val pointyOuch: Boolean): Shapes()
-        data class DumbStatue(val pointyOuch: Boolean, val triangleBase: Triangle, val circleUpper: Circle): Shapes()
+        data class Triangle(val numSides: Int, val pointyOuch: Boolean) : Shapes()
+        data class Circle(val diameter: Int, val pointyOuch: Boolean) : Shapes()
+        data class DumbStatue(val pointyOuch: Boolean, val triangleBase: Triangle, val circleUpper: Circle) : Shapes()
+    }
+
+    data class IDAttributes(val colour: String, val old: Boolean = false)
+    data class ID(val type: String = "book", val number: String, val attr: IDAttributes)
+    sealed class Person {
+        data class Mike(val name: String, val id: ID, val old: Int = 3): Person()
+        data class Sam(val name: String, val lakker: Boolean = true): Person()
     }
 
     private val objectMapper = jacksonObjectMapper()
     private val fruitsSealedClassDeserializer: SimpleModule = SimpleModule().addDeserializer(Fruits::class.java, Deserializer(Fruits::class))
     private val shapesSealedClassDeserializer: SimpleModule = SimpleModule().addDeserializer(Shapes::class.java, Deserializer(Shapes::class))
+    private val personSealedClassDeserializer: SimpleModule = SimpleModule().addDeserializer(Person::class.java, Deserializer(Person::class))
 
     @Before
     fun setup() {
         objectMapper.registerModule(fruitsSealedClassDeserializer)
         objectMapper.registerModule(shapesSealedClassDeserializer)
+        objectMapper.registerModule(personSealedClassDeserializer)
     }
 
     @Test
@@ -80,7 +90,6 @@ class DeserializerTest {
     }
 
     @Test
-    @Ignore
     @DisplayName("Can deserialise compound objects")
     fun canDeserialiseCompoundObject() {
         val json = """{
@@ -96,13 +105,30 @@ class DeserializerTest {
 
         val shape = objectMapper.readValue<Shapes>(json)
 
-        val shapeType = when(shape) {
+        val shapeType = when (shape) {
             is Shapes.Circle -> throw Error("Circle is not the correct shape")
             is Shapes.Triangle -> throw Error("Triangle is not the correct shape")
             is Shapes.DumbStatue -> "a beautiful statue"
         }
 
         assert(shapeType.equals("a beautiful statue"))
+    }
+
+
+    @Test
+    @DisplayName("Can deserialise compound object which contains defaults.")
+    fun canDeserialiseCompoundObjectWithDefaults() {
+        val json = """{
+            |"name":"mike",
+            |"id":{
+            |   "number": "8907435298766",
+            |   "attr": {
+            |       "colour": "green"
+            |   }
+            |}}""".trimMargin()
+
+        val person = objectMapper.readValue<Person>(json)
+        assert(1 == 1)
     }
 }
 
