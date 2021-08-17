@@ -24,6 +24,7 @@ and register as a custom deserializer
 
 ```kotlin
 val objectMapper = jacksonObjectMapper()
+
 val vehicleSealedClassDeserializer: SimpleModule = 
     SimpleModule().addDeserializer(
         Vehicles::class.java,
