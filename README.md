@@ -12,7 +12,7 @@ Just plug in the sealed class and off you go.
 
 Create a sealed class
 
-```
+```kotlin
 sealed class Vehicles {
     data class Ferrari(val colour: String, val price: Int) : Vehicles()
     data class Golfcart(val colour: String?) : Vehicles()
@@ -22,7 +22,7 @@ sealed class Vehicles {
 
 and register as a custom deserializer
 
-```
+```kotlin
 val objectMapper = jacksonObjectMapper()
 val vehicleSealedClassDeserializer: SimpleModule = 
     SimpleModule().addDeserializer(
@@ -32,7 +32,7 @@ val vehicleSealedClassDeserializer: SimpleModule =
 objectMapper.registerModule(vehicleSealedClassDeserializer)
 ```
 and use as required (without building a custom deserializer each time).
-```
+```kotlin
 val json = """{
               |"colour": "grey",
               |"price": 300000  
